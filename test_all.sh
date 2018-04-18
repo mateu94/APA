@@ -15,25 +15,31 @@ else
 
 	echo "########################################"
 	echo "ip_stride_prefetcher"
-	zcat "$TRACE" | ./dpc2sim_ip_stride_prefetcher> $OUTPUT 
+	zcat "$TRACE" | ./dpc2sim_ip_stride_prefetcher > $OUTPUT 
 	tail -n 3 $OUTPUT | head -n 1
 	echo ""
 
 	echo "########################################"
 	echo "next_line_prefetcher"
-	zcat "$TRACE" | ./dpc2sim_next_line_prefetcher> $OUTPUT 
+	zcat "$TRACE" | ./dpc2sim_next_line_prefetcher > $OUTPUT 
 	tail -n 3 $OUTPUT | head -n 1
 	echo ""
 
 	echo "########################################"
 	echo "stream_prefetcher"
-	zcat "$TRACE" | ./dpc2sim_stream_prefetcher> $OUTPUT 
+	zcat "$TRACE" | ./dpc2sim_stream_prefetcher > $OUTPUT 
 	tail -n 3 $OUTPUT | head -n 1
 	echo ""
 
 	echo "########################################"
 	echo "skeleton"
-	zcat "$TRACE" | ./dpc2sim_skeleton> $OUTPUT 
+	zcat "$TRACE" | ./dpc2sim_skeleton > $OUTPUT 
+	tail -n 3 $OUTPUT | head -n 1
+	echo ""
+
+	echo "########################################"
+	echo "marc"
+	zcat "$TRACE" | ./dpc2sim_marc_prefetcher > $OUTPUT 
 	tail -n 3 $OUTPUT | head -n 1
 
 	rm $OUTPUT
