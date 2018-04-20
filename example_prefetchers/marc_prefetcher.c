@@ -40,6 +40,11 @@ typedef struct ASC_History_
 	// Prefetch prediction (4 subsequent deltas)
 	long long int prediction[64][4];
 
+	// State of the delta correlation
+	// 1: Valid
+	// 0: Not valid, the prediction is being calculated
+	char state[64];
+
 	// Length of the prediction (4 means prediction has been calculated)
 	char length[64];
 
@@ -63,8 +68,11 @@ typedef struct ASC_Current_
 	// Length of the prediction (4 means prediction has been calculated)
 	char length[4];
 
+	// Index to the History ASC
+	unsigned int indexHistory[4];
+
 	// Pointer to the head of the ASC
-	char head;
+	unsigned int head;
 } ASC_Current_;
 
 GHB_page GHB[PAGE_COUNT];
@@ -76,7 +84,18 @@ ASC_Current_ ASC_Current;
 unsigned long long int lru;
 
 unsigned long long int lastAddr;
+long long int lastlastDelta;
 long long int lastDelta;
+
+void printInformation()
+{
+	printf("ASC Current\n");
+	int i;
+	for(i=0; i<4; i++)
+	{
+		printf("%lld, %lld, %d, %u\n", ASC_Current.firstDelta[i], ASC_Current.secondDelta[i], ASC_Current.length[i], ASC_Current.indexHistory[i]);
+	}
+}
 
 void l2_prefetcher_initialize(int cpu_num)
 {
@@ -101,6 +120,7 @@ void l2_prefetcher_initialize(int cpu_num)
 	ASC_Current.head = 0;
 
 	lastAddr = 0;
+	lastlastDelta = 0;
 	lastDelta = 0;
 }
 
@@ -148,30 +168,92 @@ void l2_prefetcher_operate(int cpu_num, unsigned long long int addr, unsigned lo
 	{
 		// calculate the stride between the current address and the last address
 		long long int delta;
-		delta = addr - lastAddr;
+		delta = cl_address - lastAddr;
 
 		int i;
-		// Look if the current correlation is being processed
+		char found = 0;
+		char found2 = 0;
+
+		// Look if there are pending correlations to be predicted
 		for(i=0; i<4; i++)
 		{
-			if (ASC_Current.firstDelta[i] == lastDelta && ASC_Current.secondDelta[i] == delta)
+			if (ASC_Current.length[i] != 4)
 			{
-				char length = ASC_Current.length[i];
-				if (length == 4)
+				char index = ASC_Current.length[i];
+				unsigned int indexHistory = ASC_Current.indexHistory[i];
+				ASC_History.prediction[indexHistory][index] = delta;
+
+				// Increase the prediction length and set the state to 1 if the prediction is full
+				ASC_Current.length[i]++;
+				ASC_History.length[indexHistory]++;
+				if (ASC_Current.length[i] == 4)
 				{
-					// The ASC_History is updated with the new prediction
-				}
-				else
-				{
-					// Append delta to the prediction
-					ASC_Current.prediction[i][length] = delta;
-					ASC_Current.length[i]++;
+					ASC_History.state[indexHistory] = 1;
 				}
 			}
 		}
+
+		// Look if the current correlation is already in the ASC
+		for (i=0; i<64 && (!found || !found2); i++)
+		{
+			// Check if the current correlation is ready and valid to prefetch
+			if (ASC_History.firstDelta[i] == lastDelta && ASC_History.secondDelta[i] == delta)
+			{
+				found = 1;
+				if (ASC_History.state[i] == 1)
+				{
+					l2_prefetch_line(0, addr, ((addr>>6)+ASC_History.prediction[i][0])<<6, FILL_L2);
+					l2_prefetch_line(0, addr, ((addr>>6)+ASC_History.prediction[i][1])<<6, FILL_L2);
+					l2_prefetch_line(0, addr, ((addr>>6)+ASC_History.prediction[i][2])<<6, FILL_L2);
+					l2_prefetch_line(0, addr, ((addr>>6)+ASC_History.prediction[i][3])<<6, FILL_L2);
+				}
+			}
+			// Check if the first predicted delta of the previous correlation is correct
+			else if (ASC_History.firstDelta[i] == lastlastDelta && ASC_History.secondDelta[i] == lastDelta)
+			{	
+				found2 = 1;
+				// If it differs, set the state to 0 and start the new prediction
+				if (ASC_History.state[i] == 1 && ASC_History.prediction[i][0] != delta)
+				{
+					ASC_History.state[i] = 0;
+					ASC_History.prediction[i][0] = delta;
+					ASC_History.length[i] = 1;
+
+					unsigned int head = ASC_Current.head;
+					ASC_Current.firstDelta[head] = lastlastDelta;
+					ASC_Current.secondDelta[head] = lastDelta;
+					ASC_Current.length[head] = 1;
+					ASC_Current.indexHistory[head] = i;
+					ASC_Current.head = (ASC_Current.head + 1)%4;
+				}
+			}
+		}
+
+		// If not found add a new entry for that correlation and start the new prediction
+		if (!found && lastlastDelta != 0 && lastDelta != 0)
+		{
+			unsigned int head = ASC_History.head;
+			ASC_History.firstDelta[head] = lastDelta;
+			ASC_History.secondDelta[head] = delta;
+			ASC_History.state[head] = 0;
+			ASC_History.length[head] = 0;
+			ASC_History.head = (ASC_History.head +1)%64;
+
+			unsigned int headCurrent = ASC_Current.head;
+			ASC_Current.firstDelta[headCurrent] = lastDelta;
+			ASC_Current.secondDelta[headCurrent] = delta;
+			ASC_Current.length[headCurrent] = 0;
+			ASC_Current.indexHistory[headCurrent] = ASC_History.head;
+			ASC_Current.head = (ASC_Current.head + 1)%4;
+		}
+
+		lastAddr = cl_address;
+		lastlastDelta = lastDelta;
+		lastDelta = delta;
 	}
 
-	//l2_prefetch_line(0, addr, ((addr>>6)+1)<<6, FILL_L2);
+	//printf("lastlastDelta = %lld, lastDelta = %lld\n", lastlastDelta, lastDelta);
+	//printInformation();
 }
 
 void l2_cache_fill(int cpu_num, unsigned long long int addr, int set, int way, int prefetch, unsigned long long int evicted_addr)
