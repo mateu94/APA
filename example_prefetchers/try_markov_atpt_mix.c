@@ -63,9 +63,9 @@ void l2_prefetcher_initialize(int cpu_num)
   printf("Knobs visible from prefetcher: %d %d %d\n", knob_scramble_loads, knob_small_llc, knob_low_bandwidth);
 
    int i;
-  printf("breakpoint4\n");
+ 
   for(i=0; i<Page_Count; i++)
-    { printf("breakpoint1\n");
+    { 
       PF_pages[i].page = 0;
       PF_pages[i].lru = 0;
 
@@ -77,7 +77,7 @@ void l2_prefetcher_initialize(int cpu_num)
           PF_pages[i].delta_pointer[j] = -1;
 	  PF_pages[i].pf_map[j] = 0;
 	}
-      printf("breakpoint2\n");
+     
      int k;
      for(k=0; k<delta_table_Size; k++)
          {PF_pages[i].delta_delta[k]=0;
@@ -90,9 +90,9 @@ void l2_prefetcher_initialize(int cpu_num)
     PF_pages[i].top_access=-1;
     PF_pages[i].top_delta=-1;
     PF_pages[i].prev_delta_point=-1;
-     printf("breakpoint3\n");
+   
     }
-printf("breakpointdone\n");
+
 }
 
 void l2_prefetcher_operate(int cpu_num, unsigned long long int addr, unsigned long long int ip, int cache_hit)
@@ -113,14 +113,14 @@ void l2_prefetcher_operate(int cpu_num, unsigned long long int addr, unsigned lo
   for(i=0; i<Page_Count; i++)
     {
       if(PF_pages[i].page == page)
-	{  printf("OPERATE page found\n");
+	{ 
 	  page_index = i;
 	  break;
 	}
     }
 
   if(page_index == -1)
-    { printf("operate page not found\n");
+    { 
       // the page was not found, so we must replace an old page with this new page
 
       // find the oldest page
@@ -139,8 +139,7 @@ void l2_prefetcher_operate(int cpu_num, unsigned long long int addr, unsigned lo
 
       // reset the oldest page
       PF_pages[page_index].page = page;
-      printf("page middle: %llu \n",  PF_pages[page_index].page);
-
+     
        int j;
       for(j=0; j<64; j++)
 	{
@@ -190,7 +189,7 @@ void l2_prefetcher_operate(int cpu_num, unsigned long long int addr, unsigned lo
   //checking the Access_key_table for a hit
     int hit = 0;
     int access_index;
-    printf("operate Access key table\n");
+
     for(i=0; i<64; i++)
        {
         if (delta1 == PF_pages[page_index].access_key1[i] && delta2 == PF_pages[page_index].access_key2[i])
@@ -212,7 +211,7 @@ void l2_prefetcher_operate(int cpu_num, unsigned long long int addr, unsigned lo
          }
         PF_pages[page_index].access_key1[access_index] = delta1;
         PF_pages[page_index].access_key2[access_index] = delta2;
-        printf("not hit access key: %llu %llu \n", PF_pages[page_index].access_key1[access_index] , PF_pages[page_index].access_key2[access_index]);
+     //   printf("not hit access key: %llu %llu \n", PF_pages[page_index].access_key1[access_index] , PF_pages[page_index].access_key2[access_index]);
 
        }
 
@@ -223,9 +222,9 @@ void l2_prefetcher_operate(int cpu_num, unsigned long long int addr, unsigned lo
   
     else
        {printf("Access key table: hit\n");
-        printf("hit access index | page index: %d %d \n", access_index, page_index);
+   //     printf("hit access index | page index: %d %d \n", access_index, page_index);
 
-        printf("hit access key: %llu %llu \n", PF_pages[page_index].access_key1[access_index] , PF_pages[page_index].access_key2[access_index]);
+  //      printf("hit access key: %llu %llu \n", PF_pages[page_index].access_key1[access_index] , PF_pages[page_index].access_key2[access_index]);
 
         int count_prefetch;
         int trace_delta;
@@ -235,14 +234,20 @@ void l2_prefetcher_operate(int cpu_num, unsigned long long int addr, unsigned lo
         unsigned long long int new_addr = addr;
         
         for(count_prefetch=1; count_prefetch <= Prefetch_Degree; count_prefetch++)
-           {
+           { printf("current_delta_pointer | next_delta_pointer: %d %d \n", current_delta_pointer, next_delta_pointer);
               if (count_prefetch!=1)
-                 {  if( ((trace_delta == PF_pages[page_index].delta_delta[next_delta_pointer]) || (PF_pages[page_index].delta_point[next_delta_pointer] ==-1) ) && (current_delta_pointer <98) )
-
-                      {
-                       current_delta_pointer++;
-                       trace_delta = PF_pages[page_index].delta_delta[current_delta_pointer];
-                       new_addr = new_addr + trace_delta;
+                 {  if( trace_delta == PF_pages[page_index].delta_delta[next_delta_pointer] )
+ 
+                      {if (current_delta_pointer >= delta_table_Size -1)
+                          {
+                           current_delta_pointer = 0;
+                          }
+                       else
+                          {
+                           current_delta_pointer++;
+                          }      
+                        trace_delta = PF_pages[page_index].delta_delta[current_delta_pointer];
+                        new_addr = new_addr + trace_delta;
                       }
                     else
                       {
@@ -274,15 +279,15 @@ void l2_prefetcher_operate(int cpu_num, unsigned long long int addr, unsigned lo
             else
               {
                // check the MSHR occupancy to decide if we're going to prefetch to the L2 or LLC
-	       if(get_l2_mshr_occupancy(0) < 12)
+	       if(get_l2_mshr_occupancy(0) < 8)
 	        {
 	         l2_prefetch_line(0, addr, new_addr, FILL_L2);
-                 printf("\nPREFETCHED, L2: addr | new addr : %llu %llu \n\n", addr , new_addr);
+             //    printf("\nPREFETCHED, L2: addr | new addr : %llu %llu \n\n", addr , new_addr);
 	        }
 	       else
 	        {
 	         l2_prefetch_line(0, addr, new_addr, FILL_LLC);
-                 printf("\nPREFETCHED, LLC: addr | new addr : %llu %llu \n\n", addr , new_addr);	      
+            //     printf("\nPREFETCHED, LLC: addr | new addr : %llu %llu \n\n", addr , new_addr);	      
 	        }
                // update the PF_map
                PF_pages[page_index].pf_map[new_pageoffset] = 1;
@@ -290,14 +295,14 @@ void l2_prefetcher_operate(int cpu_num, unsigned long long int addr, unsigned lo
               }
              if (next_delta_pointer==-1)
                {
-                count_prefetch = Prefetch_Degree + 1;
+                break;
                }
 
            }  
        }
      
      // Update delta_table_pointer
-     if(PF_pages[page_index].top_delta < delta_table_Size)
+     if(PF_pages[page_index].top_delta < delta_table_Size-1)
         PF_pages[page_index].top_delta++;
      else
         { 
@@ -310,12 +315,12 @@ void l2_prefetcher_operate(int cpu_num, unsigned long long int addr, unsigned lo
 
      // Update last addresses
      PF_pages[page_index].last_address2 = PF_pages[page_index].last_address1;
-      printf("last addresses: %llu %llu \n", PF_pages[page_index].last_address2 , PF_pages[page_index].last_address1);
+  //    printf("last addresses: %llu %llu \n", PF_pages[page_index].last_address2 , PF_pages[page_index].last_address1);
 
      PF_pages[page_index].last_address1 = addr;
-     printf("last addresses: %llu %llu \n", PF_pages[page_index].last_address2 , PF_pages[page_index].last_address1);
+  //   printf("last addresses: %llu %llu \n", PF_pages[page_index].last_address2 , PF_pages[page_index].last_address1);
     
-        printf("page end: %llu \n",  PF_pages[page_index].page);
+ //       printf("page end: %llu \n",  PF_pages[page_index].page);
        
         printf("prefetcher out \n\n");
 
