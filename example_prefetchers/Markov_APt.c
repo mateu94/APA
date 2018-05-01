@@ -5,9 +5,9 @@
 
 /*
   
-  This file describes a markov style prefetcher with a prefetch history table.  For each input address addr,
-  the pair of deltal is calculated and that is used as the access key, then the chain is traversed and prefetches issued (according to the prefetch degree, if they do not 
-  belong to the Prefetch table .they are then filled into L2 or LLC depending on L2's availability filled into the L2.
+  This file describes a Markov style prefetcher with a prefetch and access history table.  For each input address addr,
+ the most recent pair of delta is calculated and that is used as the access key. The chain is then traversed and prefetches issued. In this prefetcher, the prefetch degree is set as 2.
+ The chain is followed according to certain conditions.The prefetches are then filled into L2 or LLC depending on L2's MSHR status.
 
  */
 
